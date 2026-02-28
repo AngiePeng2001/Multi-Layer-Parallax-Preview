@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多图层视差效果预览</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: white;
+        }
+
+        /* 视差主容器 */
+        .parallax-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            padding-left: 8%;
+            perspective: 1000px;
+            overflow: hidden;
+        }
+
+        /* 动态生成的层样式 */
+        .layer {
+            position: absolute;
+            top: -15%;
+            left: -15%;
+            width: 130%; 
+            height: 130%;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            transition: transform 0.2s ease-out;
+            pointer-events: none;
+        }
+
+        /* 黑色遮罩层 */
+        .page-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 80;
+            pointer-events: none;
+        }
+
+        /* 固定文本组 */
+        .text-group {
+            position: relative;
+            z-index: 100;
+            pointer-events: none;
+            user-select: none;
+            max-width: 600px;
+        }
+
+        .main-title {
+            font-size: clamp(3rem, 8vw, 6rem);
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: -0.02em;
+            line-height: 0.85;
+            margin-bottom: 1.5rem;
+            text-shadow: 0 10px 30px rgba(0,0,0,0.8);
+        }
+
+        .sub-title {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: clamp(0.9rem, 1.5vw, 1.1rem);
+            font-weight: 400;
+            letter-spacing: 0.1em;
+            max-width: 80%;
+        }
+
+        /* 侧边栏设置 */
+        .sidebar {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 320px;
+            height: 100%;
+            background: rgba(15, 15, 15, 0.8);
+            backdrop-filter: blur(25px);
+            z-index: 200;
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .sidebar.collapsed {
+            transform: translateX(100%);
+        }
+
+        .sidebar-toggle {
+            position: absolute;
+            left: -40px;
+            top: 20px;
+            width: 40px;
+            height: 40px;
+            background: rgba(15, 15, 15, 0.8);
+            backdrop-filter: blur(25px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-right: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border-radius: 8px 0 0 8px;
+        }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+        }
+
+        /* 语言切换器 - 缩小尺寸 */
+        .lang-switch {
+            display: inline-flex;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 2px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .lang-btn {
+            padding: 4px 10px;
+            font-size: 9px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .lang-btn.active {
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+        }
+
+        /* 图层控制卡片 */
+        .layer-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            position: relative;
+        }
+
+        .layer-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .layer-order-tag {
+            font-size: 9px;
+            padding: 2px 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            color: #fff;
+        }
+
+        .control-group {
+            margin-bottom: 12px;
+        }
+
+        .control-group label {
+            display: block;
+            font-size: 10px;
+            margin-bottom: 4px;
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: #fff;
+            height: 4px;
+            cursor: pointer;
+        }
+
+        .btn-add {
+            width: 100%;
+            padding: 12px;
+            background: white;
+            color: black;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 12px;
+            margin-bottom: 8px;
+            transition: all 0.2s;
+        }
+
+        .btn-clear {
+            width: 100%;
+            padding: 10px;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 11px;
+            margin-bottom: 16px;
+            transition: all 0.2s;
+        }
+
+        .btn-clear:hover {
+            color: white;
+            border-color: rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .order-desc {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.4);
+            margin-bottom: 24px;
+            line-height: 1.4;
+            padding: 0 4px;
+        }
+
+        .btn-delete {
+            color: #ff4d4d;
+            font-size: 10px;
+            cursor: pointer;
+        }
+
+        .btn-upload {
+            display: block;
+            width: 100%;
+            padding: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            font-size: 10px;
+            text-align: center;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+
+        /* 滚动条 */
+        .sidebar-content::-webkit-scrollbar { width: 4px; }
+        .sidebar-content::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+        .empty-hint {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(255,255,255,0.1);
+            text-align: center;
+            pointer-events: none;
+            letter-spacing: 0.2em;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="parallax-container" id="layer-container">
+        <!-- 动态图层 -->
+        <div class="page-overlay"></div>
+
+        <div id="text-group" class="text-group" style="opacity: 1;">
+            <h1 class="main-title">Multi-Layer<br>Dynamic Space</h1>
+            <p class="sub-title" id="page-subtitle">Configure your own depth. Adjust speed and visibility for each unique plane.</p>
+        </div>
+
+        <div id="empty-hint" class="empty-hint">
+            <p id="empty-text">ADD LAYERS IN SIDEBAR</p>
+        </div>
+    </div>
+
+    <!-- 侧边栏 -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-toggle" onclick="toggleSidebar()">
+            <span id="toggle-icon">→</span>
+        </div>
+        <div class="sidebar-content">
+            <!-- 语言切换 -->
+            <div class="lang-switch">
+                <div class="lang-btn" id="btn-zh" onclick="setLanguage('zh')">中文</div>
+                <div class="lang-btn" id="btn-en" onclick="setLanguage('en')">EN</div>
+            </div>
+
+            <h2 class="text-xl font-bold mb-4" id="sidebar-title">图层管理</h2>
+            
+            <button class="btn-add" id="btn-add" onclick="addLayer()">+ 添加新图层</button>
+            <button class="btn-clear" id="btn-clear" onclick="clearAllImages()">清空图层图片</button>
+            <p class="order-desc" id="order-desc">提示：列表顶部的图层在视觉上位于最前端。</p>
+
+            <div id="controls-list">
+                <!-- 动态控制卡片 -->
+            </div>
+        </div>
+    </aside>
+
+    <script>
+        // 多语言词典
+        const i18n = {
+            zh: {
+                title: "图层管理",
+                addLayer: "+ 添加新图层",
+                clearImages: "清空所有图层图片",
+                speed: "移动幅度 (速度)",
+                opacity: "透明度",
+                upload: "上传图片",
+                delete: "删除",
+                top: "最上层",
+                bottom: "最下层",
+                layerPrefix: "图层",
+                empty: "在侧边栏添加图层",
+                orderDesc: "提示：列表顶部的图层在视觉上位于最前端。",
+                subtitle: "配置您自己的视觉深度。为每个独立的平面调整速度和能见度。"
+            },
+            en: {
+                title: "Layer Control",
+                addLayer: "+ ADD NEW LAYER",
+                clearImages: "CLEAR ALL IMAGES",
+                speed: "Amplitude (Speed)",
+                opacity: "Opacity",
+                upload: "UPLOAD IMAGE",
+                delete: "DELETE",
+                top: "TOP",
+                bottom: "BOTTOM",
+                layerPrefix: "Layer",
+                empty: "ADD LAYERS IN SIDEBAR",
+                orderDesc: "Note: Top layers in the list are visually at the front.",
+                subtitle: "Configure your own depth. Adjust speed and visibility for each unique plane."
+            }
+        };
+
+        let currentLang = 'zh';
+
+        // 图层状态 - 预设 3 个图层，全部默认透明度为 1
+        let layers = [
+            { id: 101, name: "Front Layer", speed: 20, opacity: 1, image: "1.png" },
+            { id: 102, name: "Mid Layer", speed: 60, opacity: 1, image: "2.png" },
+            { id: 103, name: "Back Layer", speed: 120, opacity: 1, image: "3.png" }
+        ];
+
+        const container = document.getElementById('layer-container');
+        const controlsList = document.getElementById('controls-list');
+        const emptyHint = document.getElementById('empty-hint');
+
+        function init() {
+            setLanguage('zh');
+            setupMouseMove();
+        }
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            document.getElementById('btn-zh').classList.toggle('active', lang === 'zh');
+            document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+            
+            const t = i18n[lang];
+            document.getElementById('sidebar-title').innerText = t.title;
+            document.getElementById('btn-add').innerText = t.addLayer;
+            document.getElementById('btn-clear').innerText = t.clearImages;
+            document.getElementById('order-desc').innerText = t.orderDesc;
+            document.getElementById('empty-text').innerText = t.empty;
+            document.getElementById('page-subtitle').innerText = t.subtitle;
+            
+            render();
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const icon = document.getElementById('toggle-icon');
+            sidebar.classList.toggle('collapsed');
+            icon.innerText = sidebar.classList.contains('collapsed') ? '←' : '→';
+        }
+
+        // 清空所有图层的图片
+        function clearAllImages() {
+            layers.forEach(layer => {
+                layer.image = null;
+            });
+            render();
+        }
+
+        function addLayer() {
+            const newLayer = {
+                id: Date.now(),
+                name: `${i18n[currentLang].layerPrefix} ${layers.length + 1}`,
+                speed: 50,
+                opacity: 1, // 新添加图层默认透明度也设为 1
+                image: null
+            };
+            layers.unshift(newLayer);
+            render();
+        }
+
+        function removeLayer(id) {
+            layers = layers.filter(l => l.id !== id);
+            render();
+        }
+
+        function updateLayer(id, key, value) {
+            const layer = layers.find(l => l.id === id);
+            if (layer) {
+                layer[key] = parseFloat(value);
+                if (key === 'opacity') {
+                    const el = document.querySelector(`[data-layer-id="${id}"]`);
+                    if (el) el.style.opacity = value;
+                }
+            }
+        }
+
+        function handleFileUpload(event, id) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const layer = layers.find(l => l.id === id);
+                if (layer) {
+                    layer.image = e.target.result;
+                    const el = document.querySelector(`[data-layer-id="${id}"]`);
+                    if (el) el.style.backgroundImage = `url('${e.target.result}')`;
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function render() {
+            const t = i18n[currentLang];
+            
+            const existingLayers = container.querySelectorAll('.layer');
+            existingLayers.forEach(el => el.remove());
+            
+            if (layers.length === 0) {
+                emptyHint.style.display = 'block';
+            } else {
+                emptyHint.style.display = 'none';
+            }
+
+            [...layers].reverse().forEach((layer, index) => {
+                const layerDiv = document.createElement('div');
+                layerDiv.className = 'layer';
+                layerDiv.dataset.layerId = layer.id;
+                layerDiv.style.zIndex = index + 5;
+                layerDiv.style.opacity = layer.opacity;
+                if (layer.image) {
+                    layerDiv.style.backgroundImage = `url('${layer.image}')`;
+                }
+                container.insertBefore(layerDiv, container.firstChild);
+            });
+
+            controlsList.innerHTML = '';
+            layers.forEach((layer, idx) => {
+                const isTop = idx === 0;
+                const isBottom = idx === layers.length - 1;
+                const orderLabel = isTop ? t.top : (isBottom ? t.bottom : "");
+
+                const card = document.createElement('div');
+                card.className = 'layer-card';
+                card.innerHTML = `
+                    <div class="layer-label">
+                        <span>#${layers.length - idx} ${t.layerPrefix}</span>
+                        <div class="flex gap-2 items-center">
+                            ${orderLabel ? `<span class="layer-order-tag">${orderLabel}</span>` : ''}
+                            <span class="btn-delete" onclick="removeLayer(${layer.id})">${t.delete}</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>${t.speed}: <span id="val-speed-${layer.id}">${layer.speed}</span></label>
+                        <input type="range" min="0" max="300" value="${layer.speed}" 
+                            oninput="updateLayer(${layer.id}, 'speed', this.value); document.getElementById('val-speed-${layer.id}').innerText = this.value">
+                    </div>
+                    <div class="control-group">
+                        <label>${t.opacity}: <span id="val-op-${layer.id}">${layer.opacity}</span></label>
+                        <input type="range" min="0" max="1" step="0.01" value="${layer.opacity}" 
+                            oninput="updateLayer(${layer.id}, 'opacity', this.value); document.getElementById('val-op-${layer.id}').innerText = this.value">
+                    </div>
+                    <label class="btn-upload">
+                        ${t.upload}
+                        <input type="file" style="display:none" accept="image/*" onchange="handleFileUpload(event, ${layer.id})">
+                    </label>
+                `;
+                controlsList.appendChild(card);
+            });
+        }
+
+        function setupMouseMove() {
+            document.addEventListener('mousemove', (e) => {
+                const { clientX, clientY } = e;
+                const { innerWidth, innerHeight } = window;
+                const offsetX = (clientX / innerWidth) - 0.5;
+                const offsetY = (clientY / innerHeight) - 0.5;
+
+                layers.forEach(layer => {
+                    const el = document.querySelector(`[data-layer-id="${layer.id}"]`);
+                    if (el) {
+                        el.style.transform = `translate(${offsetX * layer.speed}px, ${offsetY * layer.speed}px)`;
+                    }
+                });
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>
